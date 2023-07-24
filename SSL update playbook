@@ -1,0 +1,61 @@
+ name: Certification update
+  hosts: all
+  become: true
+  gather_facts: false
+  
+  tasks:
+    
+    - name: Delete files and subdirectories inside the folder
+      command: find /usr/local/share/ca-certificates -mindepth 1 -delete
+    
+    - name: Copy files to first destination
+      copy:
+        src: "/home/user/DevbitCertificates/"
+        dest: "/usr/local/share/ca-certificates/"
+
+    - name: Copy files to second destination
+      copy:
+        src: "/home/user/DevbitCertificates/"
+        dest: "/usr/share/ca-certificates/"
+        
+    - name: Install ca-certificates package
+      apt:
+        name: ca-certificates
+        state: present
+        
+    - name: Update ca-certificates
+      command: sudo update-ca-certificates
+
+    - name: Create policies.json file if it doesn't exist
+      file:
+        path: /usr/lib/firefox/distribution/policies.json
+        state: touch
+        mode: '0644'
+
+    - name: Update policies.json file
+  
+      blockinfile:
+        path: /usr/lib/firefox/distribution/policies.json
+        marker: ""
+        block: |
+          {
+            "policies": {
+              "Certificates": {
+                "ImportEnterpriseRoots": true,
+                "Install": [
+                  ["rootCA-Devbit.crt", "/usr/local/share/ca-certificates/rootCA-Devbit.crt"],
+                  ["s3-devbit.crt", "/usr/local/share/ca-certificates/s3-devbit.crt"]
+                ]
+              }
+            }
+          }
+    
+    - name: Gather logged-in users
+      command: who
+      register: logged_in_users
+      ignore_errors: true
+    
+    - name: kill user sessions
+      command: pkill -KILL -t {{ item.split()[1] }}
+      with_items: "{{ logged_in_users.stdout_lines }}"
+      when: logged_in_users.rc == 0
